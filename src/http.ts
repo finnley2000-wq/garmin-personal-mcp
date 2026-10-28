@@ -31,8 +31,12 @@ export function createFetchHandler(opts: FetchHandlerOptions): (request: Request
 
   return async (request) => {
     const url = new URL(request.url);
-    if (!paths.has(url.pathname)) return new Response("Not found", { status: 404 });
-    const given = Buffer.from(request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
+    // claude.ai custom connectors can't send a static Authorization header, so the
+    // token may also ride in the path: /mcp/<MCP_BEARER_TOKEN>.
+    let pathToken: string | undefined;
+    for (const p of paths) if (url.pathname.startsWith(p + "/")) pathToken = url.pathname.slice(p.length + 1);
+    if (!paths.has(url.pathname) && pathToken === undefined) return new Response("Not found", { status: 404 });
+    const given = Buffer.from(pathToken ?? request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
       return new Response("Unauthorized", { status: 401, headers: { "WWW-Authenticate": "Bearer" } });
     }
